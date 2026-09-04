@@ -3,17 +3,288 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Real-time Tracking App</title>
-    <link rel = "stylesheet" href="css/style.css">
-     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" integrity="sha512-h9FcoyWjHcOcmEVkxOfTLnmZFWIH0iZhZT1H2TbOq55xssQGEJHEaIm+PgoUaZbRvQTNTluNOEfb1ZRy6D3BOw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
-
-
+    <title>RiderSync - Live Group Trip Tracker</title>
+    <!-- Google Font: Outfit -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" integrity="sha512-h9FcoyWjHcOcmEVkxOfTLnmZFWIH0iZhZT1H2TbOq55xssQGEJHEaIm+PgoUaZbRvQTNTluNOEfb1ZRy6D3BOw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+    
+    <!-- Leaflet Routing Machine CSS -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet-routing-machine/3.2.12/leaflet-routing-machine.css" />
+    
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="css/style.css">
+    
+    <!-- Lucide Icons CDN -->
+    <script src="https://unpkg.com/lucide@latest"></script>
 </head>
 <body>
-    <div id="map"></div>
-    
+    <!-- Sign In / Sign Up Screen -->
+    <div id="auth-screen" class="auth-screen">
+        <div class="auth-container">
+            <div class="auth-card">
+                <header class="auth-header">
+                    <div class="logo">
+                        <i data-lucide="navigation" class="logo-icon"></i>
+                        <span>RiderSync</span>
+                    </div>
+                    <p class="tagline">Roadtrip Coordinate Sharing Portal</p>
+                </header>
+                
+                <!-- Tab selection -->
+                <div class="auth-tabs">
+                    <button type="button" id="tab-signin" class="auth-tab active">Sign In</button>
+                    <button type="button" id="tab-signup" class="auth-tab">Sign Up</button>
+                </div>
+                
+                <!-- Sign In Form -->
+                <form id="signin-form" class="auth-form-panel active" action="javascript:void(0);" onsubmit="return false;">
+                    <div class="form-group">
+                        <label for="signin-email">Email Address</label>
+                        <input type="email" id="signin-email" placeholder="rider@example.com" required autocomplete="email" autofocus>
+                    </div>
+                    <button type="submit" id="signin-submit-btn" class="btn primary-btn"><i data-lucide="mail"></i> Send Verification Code</button>
+                </form>
+                
+                <!-- Sign Up Form -->
+                <form id="signup-form" class="auth-form-panel" action="javascript:void(0);" onsubmit="return false;">
+                    <div class="form-group">
+                        <label for="signup-name">Full Name</label>
+                        <input type="text" id="signup-name" placeholder="John Doe" autocomplete="name">
+                    </div>
+                    <div class="form-group">
+                        <label for="signup-email">Email Address</label>
+                        <input type="email" id="signup-email" placeholder="rider@example.com" autocomplete="email">
+                    </div>
+                    <button type="submit" id="signup-submit-btn" class="btn primary-btn"><i data-lucide="sparkles"></i> Create Account & Send Code</button>
+                </form>
+                
+                <!-- Verification Form (Initially Hidden) -->
+                <form id="verify-form" class="auth-form-panel" action="javascript:void(0);" onsubmit="return false;">
+                    <div class="verify-details">
+                        <i data-lucide="shield-alert" class="verify-icon"></i>
+                        <p>We sent a 6-digit OTP code to: <br><strong id="verify-target-email">---</strong></p>
+                    </div>
+                    <div class="form-group">
+                        <label>Enter 6-Digit OTP Code</label>
+                        <div class="otp-input-group">
+                            <input type="text" class="otp-box" maxlength="1" pattern="[0-9]" inputmode="numeric" data-index="0" autocomplete="one-time-code">
+                            <input type="text" class="otp-box" maxlength="1" pattern="[0-9]" inputmode="numeric" data-index="1">
+                            <input type="text" class="otp-box" maxlength="1" pattern="[0-9]" inputmode="numeric" data-index="2">
+                            <input type="text" class="otp-box" maxlength="1" pattern="[0-9]" inputmode="numeric" data-index="3">
+                            <input type="text" class="otp-box" maxlength="1" pattern="[0-9]" inputmode="numeric" data-index="4">
+                            <input type="text" class="otp-box" maxlength="1" pattern="[0-9]" inputmode="numeric" data-index="5">
+                        </div>
+                        <input type="hidden" id="verify-code" name="verify-code">
+                    </div>
+                    <div class="otp-resend-bar">
+                        <span id="otp-timer-text" class="otp-timer"><i data-lucide="clock"></i> Resend code in <strong id="resend-countdown">60</strong>s</span>
+                        <button type="button" id="btn-resend-otp" class="btn-text resend-btn hidden"><i data-lucide="rotate-cw"></i> Resend OTP</button>
+                    </div>
+                    <button type="submit" id="verify-submit-btn" class="btn success-btn"><i data-lucide="shield-check"></i> Verify & Login</button>
+                    <button type="button" id="btn-back-to-auth" class="btn-text"><i data-lucide="arrow-left"></i> Change Email</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div id="app-container">
+        <!-- Sidebar Panel -->
+        <aside id="sidebar" class="sidebar">
+            <header class="sidebar-header">
+                <div class="logo">
+                    <i data-lucide="navigation" class="logo-icon"></i>
+                    <span>RiderSync</span>
+                </div>
+                <p class="tagline">Coordinate group trips in real-time</p>
+            </header>
+
+            <div class="sidebar-content">
+                <!-- Section 1: Create Trip Form -->
+                <section id="create-trip-section" class="form-section active">
+                    <h2 class="section-title"><i data-lucide="plus-circle"></i> Create a New Trip</h2>
+                    <form id="create-trip-form" action="javascript:void(0);" onsubmit="return false;">
+                        <div class="form-group">
+                            <label for="trip-name">Trip Name</label>
+                            <input type="text" id="trip-name" placeholder="e.g. Weekend Mountain Ride" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="trip-destination">Destination Search</label>
+                            <div class="search-input-wrapper">
+                                <input type="text" id="trip-destination" placeholder="Search address or city..." required autocomplete="off">
+                                <button type="button" id="search-dest-btn" class="icon-btn"><i data-lucide="search"></i></button>
+                            </div>
+                            <ul id="search-results" class="search-results-dropdown hidden"></ul>
+                            <div id="selected-destination-display" class="selected-dest hidden">
+                                <i data-lucide="map-pin"></i> <span id="dest-display-text">No destination selected</span>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="member-emails">Invite Member Emails (comma separated)</label>
+                            <textarea id="member-emails" placeholder="john@example.com, alice@example.com" rows="2"></textarea>
+                        </div>
+                        <button type="submit" class="btn primary-btn"><i data-lucide="sparkles"></i> Initialize Trip</button>
+                    </form>
+                </section>
+
+                <!-- Section 2: Join Trip Form -->
+                <section id="join-trip-section" class="form-section hidden">
+                    <h2 class="section-title"><i data-lucide="users"></i> Join Existing Trip</h2>
+                    <form id="join-trip-form" action="javascript:void(0);" onsubmit="return false;">
+                        <div class="form-group">
+                            <label for="join-trip-id">Trip ID</label>
+                            <input type="text" id="join-trip-id" placeholder="Enter 7-character Code" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="user-name">Your Name</label>
+                            <input type="text" id="user-name" placeholder="e.g. John Doe" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="user-email">Your Email</label>
+                            <input type="email" id="user-email" placeholder="john@example.com" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="user-phone">Phone Number (Optional - for calling/WhatsApp)</label>
+                            <input type="tel" id="user-phone" placeholder="e.g. +1234567890">
+                        </div>
+                        <button type="submit" class="btn success-btn"><i data-lucide="log-in"></i> Join Group</button>
+                    </form>
+                </section>
+
+                <!-- Section 3: Active Trip Dashboard -->
+                <section id="active-trip-section" class="form-section hidden">
+                    <!-- Live Stats Dashboard -->
+                    <div class="dashboard-header">
+                        <h2 id="active-trip-title" class="trip-title-display">Riding Group</h2>
+                        <div class="trip-id-badge">
+                            <span>Code: </span><strong id="active-trip-id-display">------</strong>
+                            <button id="copy-trip-id" class="icon-btn-small" title="Copy Invitation Link"><i data-lucide="copy"></i></button>
+                        </div>
+                    </div>
+
+                    <!-- Master Start Trip & GPS Control Box -->
+                    <div class="trip-control-card">
+                        <button type="button" id="start-trip-btn" class="btn start-trip-btn">
+                            <i data-lucide="play-circle"></i> Start Trip & Broadcast GPS
+                        </button>
+                        <div class="tracking-sub-bar">
+                            <span id="gps-status-indicator" class="status-badge-offline">● GPS Paused</span>
+                            <button type="button" id="simulate-ride-btn" class="simulate-btn" title="Simulate riding movement for testing">
+                                <i data-lucide="navigation-2"></i> Simulate Ride
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- Share Options -->
+                    <div class="share-actions">
+                        <button id="share-whatsapp-btn" class="share-btn whatsapp-color"><i data-lucide="message-square"></i> WhatsApp</button>
+                        <button id="share-email-btn" class="share-btn email-color"><i data-lucide="mail"></i> Email Link</button>
+                    </div>
+
+                    <!-- In-Trip Real Email Invite Box -->
+                    <div class="in-trip-invite-card">
+                        <h4 class="invite-card-title"><i data-lucide="user-plus"></i> Send Email Invite to Friend</h4>
+                        <form id="in-trip-invite-form" class="in-trip-invite-form">
+                            <input type="email" id="invite-more-emails" placeholder="friend@example.com" required autocomplete="off">
+                            <button type="submit" class="btn primary-btn-sm"><i data-lucide="send"></i> Send Email</button>
+                        </form>
+                    </div>
+
+                    <!-- Destination Banner -->
+                    <div id="destination-banner" class="dest-banner">
+                        <div class="dest-details">
+                            <span class="label">Destination:</span>
+                            <div id="dest-address" class="address">Searching...</div>
+                        </div>
+                        <button id="nav-destination-btn" class="nav-google-btn" title="Navigate in Google Maps"><i data-lucide="navigation-2"></i></button>
+                    </div>
+
+                    <!-- Active Members List -->
+                    <div class="member-list-container">
+                        <h3 class="subsection-title">Riders (<span id="member-count">0</span>)</h3>
+                        <ul id="members-list" class="members-list">
+                            <!-- Members injected via script.js -->
+                        </ul>
+                    </div>
+
+                    <!-- Realtime Group Chat -->
+                    <div class="group-chat-container">
+                        <h3 class="subsection-title"><i data-lucide="messages-square"></i> Group Chat</h3>
+                        <div id="chat-messages" class="chat-messages">
+                            <!-- Chat messages injected here -->
+                        </div>
+                        <form id="chat-form" class="chat-form">
+                            <input type="text" id="chat-input" placeholder="Type a message..." required autocomplete="off">
+                            <button type="submit" class="chat-send-btn"><i data-lucide="send"></i></button>
+                        </form>
+                    </div>
+                </section>
+            </div>
+            
+            <footer class="sidebar-footer">
+                <span id="toggle-section-link">Switch to Join Trip</span>
+                <span id="auth-signout-btn" class="signout-link hidden">Sign Out</span>
+            </footer>
+        </aside>
+
+        <!-- Main Map Area -->
+        <main id="map-container">
+            <!-- Sidebar Toggle Button -->
+            <button id="sidebar-toggle" class="sidebar-toggle" title="Toggle Sidebar">
+                <i data-lucide="chevron-left" id="toggle-icon"></i>
+            </button>
+
+            <!-- Map Target -->
+            <div id="map"></div>
+
+            <!-- Floating Top Route Info Bar -->
+            <div id="route-info-bar" class="route-info-bar hidden">
+                <div class="bar-content">
+                    <div class="route-header-details">
+                        <span class="pulse-indicator"></span>
+                        <span id="route-info-text">Calculating optimal Google Maps GPS routes...</span>
+                    </div>
+                    <div id="route-selector-pills" class="route-selector-pills"></div>
+                </div>
+            </div>
+
+            <!-- Floating Bottom Status Alert Bar -->
+            <div id="status-control-bar" class="status-control-bar hidden">
+                <span class="status-bar-title">Quick Status Alerts:</span>
+                <div class="status-buttons">
+                    <button class="status-btn alert-fuel" data-status="fuel" title="Stop for Fuel">
+                        <span class="emoji">⛽</span> Fuel Break
+                    </button>
+                    <button class="status-btn alert-toilet" data-status="toilet" title="Stop for Toilet">
+                        <span class="emoji">🚾</span> Toilet Break
+                    </button>
+                    <button class="status-btn alert-bike" data-status="bike" title="Bike Issue / Breakdown">
+                        <span class="emoji">🔧</span> Bike Issue
+                    </button>
+                    <button class="status-btn alert-riding active" data-status="normal" title="Resume Riding">
+                        <span class="emoji">🏍️</span> Riding
+                    </button>
+                </div>
+            </div>
+
+            <!-- Toast Container for popups -->
+            <div id="toast-container" class="toast-container"></div>
+        </main>
+    </div>
+
+    <!-- Leaflet JS -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet-src.min.js" integrity="sha512-3/WyQrhTdqSVmSifQS62akgtNBhZha2lS44TnoN9Jk3J01FvsKK4suVmz6t5FtccGb5iJw58GoFhBjPE5EPc8Q==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-    <script src="https://cdn.socket.io/4.8.1/socket.io.min.js" integrity="sha384-mkQ3/7FUtcGyoppY6bz/PORYoGqOl7/aSUMn2ymDOJcapfS6PHqxhRTMh1RR0Q6+" crossorigin="anonymous"></script>
-    <script src = "/js/script.js"></script>
+    
+    <!-- Leaflet Routing Machine JS -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet-routing-machine/3.2.12/leaflet-routing-machine.min.js"></script>
+    
+    <!-- Socket.io Client -->
+    <script src="/socket.io/socket.io.js"></script>
+    
+    <!-- Main Script -->
+    <script src="/js/script.js"></script>
 </body>
 </html>
