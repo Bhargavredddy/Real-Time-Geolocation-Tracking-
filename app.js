@@ -201,11 +201,13 @@ let cachedTransporter = null;
 async function getEmailTransporter() {
     // 1. Check for real production/custom SMTP credentials (e.g. Gmail App Password)
     if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
+        const cleanUser = process.env.EMAIL_USER.trim();
+        const cleanPass = process.env.EMAIL_PASS.replace(/\s+/g, "");
         return nodemailer.createTransport({
             service: process.env.SMTP_SERVICE || "gmail",
             auth: {
-                user: process.env.EMAIL_USER,
-                pass: process.env.EMAIL_PASS
+                user: cleanUser,
+                pass: cleanPass
             }
         });
     }
