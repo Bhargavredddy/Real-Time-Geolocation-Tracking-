@@ -204,10 +204,15 @@ async function getEmailTransporter() {
         const cleanUser = process.env.EMAIL_USER.trim();
         const cleanPass = process.env.EMAIL_PASS.replace(/\s+/g, "");
         return nodemailer.createTransport({
-            service: process.env.SMTP_SERVICE || "gmail",
+            host: process.env.SMTP_HOST || "smtp.gmail.com",
+            port: parseInt(process.env.SMTP_PORT || "465"),
+            secure: true, // SSL for port 465
             auth: {
                 user: cleanUser,
                 pass: cleanPass
+            },
+            tls: {
+                rejectUnauthorized: false
             }
         });
     }
@@ -398,6 +403,14 @@ app.post("/api/auth/send-code", async function (req, res) {
     // Dispatch real email via Nodemailer
     const emailResult = await sendOTPEmail(email, code, userName);
 
+    if (!emailResult.success) {
+        console.error(`[AUTH EMAIL ERROR] Failed to send OTP to ${email}:`, emailResult.error);
+        return res.status(500).json({ 
+            success: false, 
+            error: `Email Delivery Failed: ${emailResult.error || "Check SMTP credentials"}`
+        });
+    }
+
     // Emit real-time OTP notification to socket clients (for dev visualization)
     io.emit("otp-generated", { email, code, previewUrl: emailResult.previewUrl });
 
@@ -443,6 +456,14 @@ app.post("/api/auth/resend-code", async function (req, res) {
     
     // Dispatch real email via Nodemailer
     const emailResult = await sendOTPEmail(email, code, existing.name);
+
+    if (!emailResult.success) {
+        console.error(`[AUTH RESEND EMAIL ERROR] Failed to resend OTP to ${email}:`, emailResult.error);
+        return res.status(500).json({ 
+            success: false, 
+            error: `Email Delivery Failed: ${emailResult.error || "Check SMTP credentials"}`
+        });
+    }
 
     io.emit("otp-generated", { email, code, previewUrl: emailResult.previewUrl });
 
