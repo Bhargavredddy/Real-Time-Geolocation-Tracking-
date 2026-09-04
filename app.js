@@ -205,15 +205,19 @@ async function getEmailTransporter() {
         const cleanPass = process.env.EMAIL_PASS.replace(/\s+/g, "");
         return nodemailer.createTransport({
             host: process.env.SMTP_HOST || "smtp.gmail.com",
-            port: parseInt(process.env.SMTP_PORT || "465"),
-            secure: true, // SSL for port 465
+            port: parseInt(process.env.SMTP_PORT || "587"),
+            secure: false, // STARTTLS over port 587 (open on Render)
+            requireTLS: true,
             auth: {
                 user: cleanUser,
                 pass: cleanPass
             },
             tls: {
                 rejectUnauthorized: false
-            }
+            },
+            connectionTimeout: 10000,
+            greetingTimeout: 10000,
+            socketTimeout: 10000
         });
     }
 
