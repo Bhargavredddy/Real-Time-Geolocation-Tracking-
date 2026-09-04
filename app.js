@@ -243,38 +243,76 @@ async function getEmailTransporter() {
     return cachedTransporter;
 }
 
-// Function to dispatch styled HTML OTP Email
-async function sendOTPEmail(toEmail, code, userName) {
+// Universal Email Dispatcher supporting Resend/Brevo HTTPS APIs & Nodemailer SMTP
+async function sendEmailMessage({ toEmail, subject, htmlContent }) {
+    // 1. Try Resend HTTPS API (Recommended for Render)
+    if (process.env.RESEND_API_KEY) {
+        try {
+            const res = await fetch("https://api.resend.com/emails", {
+                method: "POST",
+                headers: {
+                    "Authorization": `Bearer ${process.env.RESEND_API_KEY.trim()}`,
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    from: "RiderSync <onboarding@resend.dev>",
+                    to: [toEmail],
+                    subject: subject,
+                    html: htmlContent
+                })
+            });
+            const data = await res.json();
+            if (res.ok) {
+                console.log(`[RESEND HTTPS EMAIL DISPATCHED] ID: ${data.id}`);
+                return { success: true, messageId: data.id };
+            } else {
+                console.error("[RESEND API ERROR]", data);
+            }
+        } catch (err) {
+            console.error("[RESEND FETCH ERROR]", err);
+        }
+    }
+
+    // 2. Try Brevo HTTPS API
+    if (process.env.BREVO_API_KEY) {
+        try {
+            const senderEmail = process.env.EMAIL_USER ? process.env.EMAIL_USER.trim() : "bhargavreddyy23@gmail.com";
+            const res = await fetch("https://api.brevo.com/v3/smtp/email", {
+                method: "POST",
+                headers: {
+                    "api-key": process.env.BREVO_API_KEY.trim(),
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    sender: { name: "RiderSync Security", email: senderEmail },
+                    to: [{ email: toEmail }],
+                    subject: subject,
+                    htmlContent: htmlContent
+                })
+            });
+            const data = await res.json();
+            if (res.ok) {
+                console.log(`[BREVO HTTPS EMAIL DISPATCHED] ID: ${data.messageId}`);
+                return { success: true, messageId: data.messageId };
+            } else {
+                console.error("[BREVO API ERROR]", data);
+            }
+        } catch (err) {
+            console.error("[BREVO FETCH ERROR]", err);
+        }
+    }
+
+    // 3. Fallback to Nodemailer SMTP (Local dev or custom SMTP server)
     try {
         const transporter = await getEmailTransporter();
         if (!transporter) return { success: false, error: "Transporter unavailable" };
 
-        const htmlContent = `
-        <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 520px; margin: 0 auto; padding: 24px; background: #0f172a; border-radius: 12px; color: #f8fafc; border: 1px solid #1e293b;">
-            <div style="text-align: center; margin-bottom: 24px;">
-                <h1 style="color: #6366f1; margin: 0; font-size: 26px; font-weight: 700; letter-spacing: -0.5px;">🏍️ RiderSync</h1>
-                <p style="color: #94a3b8; font-size: 13px; margin-top: 4px;">Roadtrip Coordinate Sharing Portal</p>
-            </div>
-            <div style="background: rgba(30, 41, 59, 0.8); padding: 20px; border-radius: 8px; border: 1px solid #334155;">
-                <h3 style="margin-top: 0; color: #f8fafc;">Hello ${userName},</h3>
-                <p style="color: #cbd5e1; font-size: 14px; line-height: 1.5;">Your 6-digit email verification OTP code for RiderSync is:</p>
-                <div style="text-align: center; margin: 24px 0;">
-                    <span style="font-size: 32px; font-weight: 800; letter-spacing: 6px; color: #6366f1; background: #1e1b4b; padding: 12px 28px; border-radius: 8px; border: 1.5px dashed #6366f1; display: inline-block;">${code}</span>
-                </div>
-                <p style="color: #94a3b8; font-size: 12px; margin-bottom: 0;">⏱️ This OTP code is valid for <strong>5 minutes</strong>. If you did not request this, please ignore this email.</p>
-            </div>
-            <div style="text-align: center; margin-top: 20px; font-size: 11px; color: #64748b;">
-                &copy; RiderSync Real-Time Geolocation Tracking. Safe Riding!
-            </div>
-        </div>
-        `;
-
-        const fromAddress = process.env.EMAIL_USER ? `"RiderSync Security" <${process.env.EMAIL_USER}>` : '"RiderSync Auth" <no-reply@ridersync.com>';
+        const fromAddress = process.env.EMAIL_USER ? `"RiderSync Security" <${process.env.EMAIL_USER.trim()}>` : '"RiderSync Auth" <no-reply@ridersync.com>';
 
         const info = await transporter.sendMail({
             from: fromAddress,
             to: toEmail,
-            subject: `${code} is your RiderSync Verification Code`,
+            subject: subject,
             html: htmlContent
         });
 
@@ -282,7 +320,7 @@ async function sendOTPEmail(toEmail, code, userName) {
         if (testPreviewUrl) {
             console.log(`[EMAIL DISPATCHED TO ETHEREAL INBOX] View email here: ${testPreviewUrl}`);
         } else {
-            console.log(`[REAL EMAIL DISPATCHED] OTP sent to inbox: ${toEmail} (MessageId: ${info.messageId})`);
+            console.log(`[REAL EMAIL DISPATCHED] Sent to inbox: ${toEmail} (MessageId: ${info.messageId})`);
         }
 
         return { success: true, previewUrl: testPreviewUrl || null };
@@ -292,65 +330,74 @@ async function sendOTPEmail(toEmail, code, userName) {
     }
 }
 
+// Function to dispatch styled HTML OTP Email
+async function sendOTPEmail(toEmail, code, userName) {
+    const htmlContent = `
+    <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 520px; margin: 0 auto; padding: 24px; background: #0f172a; border-radius: 12px; color: #f8fafc; border: 1px solid #1e293b;">
+        <div style="text-align: center; margin-bottom: 24px;">
+            <h1 style="color: #6366f1; margin: 0; font-size: 26px; font-weight: 700; letter-spacing: -0.5px;">🏍️ RiderSync</h1>
+            <p style="color: #94a3b8; font-size: 13px; margin-top: 4px;">Roadtrip Coordinate Sharing Portal</p>
+        </div>
+        <div style="background: rgba(30, 41, 59, 0.8); padding: 20px; border-radius: 8px; border: 1px solid #334155;">
+            <h3 style="margin-top: 0; color: #f8fafc;">Hello ${userName},</h3>
+            <p style="color: #cbd5e1; font-size: 14px; line-height: 1.5;">Your 6-digit email verification OTP code for RiderSync is:</p>
+            <div style="text-align: center; margin: 24px 0;">
+                <span style="font-size: 32px; font-weight: 800; letter-spacing: 6px; color: #6366f1; background: #1e1b4b; padding: 12px 28px; border-radius: 8px; border: 1.5px dashed #6366f1; display: inline-block;">${code}</span>
+            </div>
+            <p style="color: #94a3b8; font-size: 12px; margin-bottom: 0;">⏱️ This OTP code is valid for <strong>5 minutes</strong>. If you did not request this, please ignore this email.</p>
+        </div>
+        <div style="text-align: center; margin-top: 20px; font-size: 11px; color: #64748b;">
+            &copy; RiderSync Real-Time Geolocation Tracking. Safe Riding!
+        </div>
+    </div>
+    `;
+
+    return await sendEmailMessage({
+        toEmail,
+        subject: `${code} is your RiderSync Verification Code`,
+        htmlContent
+    });
+}
+
 // Function to dispatch HTML Trip Invitation Email
 async function sendTripInviteEmail({ toEmail, creatorName, tripName, tripId, destinationAddress, appUrl }) {
-    try {
-        const transporter = await getEmailTransporter();
-        if (!transporter) return { success: false, error: "Transporter unavailable" };
+    const joinLink = `${appUrl}/?tripId=${tripId}&inviteEmail=${encodeURIComponent(toEmail)}`;
 
-        const joinLink = `${appUrl}/?tripId=${tripId}&inviteEmail=${encodeURIComponent(toEmail)}`;
-
-        const htmlContent = `
-        <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 540px; margin: 0 auto; padding: 24px; background: #0f172a; border-radius: 14px; color: #f8fafc; border: 1px solid #1e293b;">
-            <div style="text-align: center; margin-bottom: 24px;">
-                <h1 style="color: #6366f1; margin: 0; font-size: 26px; font-weight: 700; letter-spacing: -0.5px;">🏍️ RiderSync</h1>
-                <p style="color: #94a3b8; font-size: 13px; margin-top: 4px;">Live Group Trip Invitation</p>
-            </div>
-            <div style="background: rgba(30, 41, 59, 0.8); padding: 24px; border-radius: 10px; border: 1px solid #334155;">
-                <h2 style="margin-top: 0; color: #f8fafc; font-size: 20px;">You're invited to join a group trip!</h2>
-                <p style="color: #cbd5e1; font-size: 15px; line-height: 1.5; margin-bottom: 16px;">
-                    <strong style="color: #6366f1;">${creatorName}</strong> has invited you to share live GPS coordinates on the ride <strong>"${tripName}"</strong>.
-                </p>
-                <div style="background: #1e1b4b; padding: 14px; border-radius: 8px; border-left: 4px solid #6366f1; margin-bottom: 20px;">
-                    <div style="font-size: 12px; color: #a5b4fc; font-weight: 600;">DESTINATION:</div>
-                    <div style="font-size: 14px; color: #ffffff; margin-top: 2px;">📍 ${destinationAddress || "Selected Group Destination"}</div>
-                    <div style="font-size: 12px; color: #a5b4fc; font-weight: 600; margin-top: 8px;">TRIP ID CODE:</div>
-                    <div style="font-size: 16px; color: #6366f1; font-weight: 700; font-family: monospace;">${tripId}</div>
-                </div>
-                <div style="text-align: center; margin: 28px 0 16px 0;">
-                    <a href="${joinLink}" target="_blank" style="background: linear-gradient(135deg, #6366f1, #4f46e5); color: #ffffff; text-decoration: none; padding: 14px 32px; border-radius: 8px; font-weight: 700; font-size: 16px; display: inline-block; box-shadow: 0 10px 20px rgba(99, 102, 241, 0.35);">
-                        👉 Click Here to Join Trip Live Map
-                    </a>
-                </div>
-                <p style="text-align: center; color: #94a3b8; font-size: 12px;">Or open RiderSync and enter Trip ID: <strong>${tripId}</strong></p>
-            </div>
-            <div style="text-align: center; margin-top: 20px; font-size: 11px; color: #64748b;">
-                &copy; RiderSync Real-Time Geolocation Tracking. Safe Riding!
-            </div>
+    const htmlContent = `
+    <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 540px; margin: 0 auto; padding: 24px; background: #0f172a; border-radius: 14px; color: #f8fafc; border: 1px solid #1e293b;">
+        <div style="text-align: center; margin-bottom: 24px;">
+            <h1 style="color: #6366f1; margin: 0; font-size: 26px; font-weight: 700; letter-spacing: -0.5px;">🏍️ RiderSync</h1>
+            <p style="color: #94a3b8; font-size: 13px; margin-top: 4px;">Live Group Trip Invitation</p>
         </div>
-        `;
+        <div style="background: rgba(30, 41, 59, 0.8); padding: 24px; border-radius: 10px; border: 1px solid #334155;">
+            <h2 style="margin-top: 0; color: #f8fafc; font-size: 20px;">You're invited to join a group trip!</h2>
+            <p style="color: #cbd5e1; font-size: 15px; line-height: 1.5; margin-bottom: 16px;">
+                <strong style="color: #6366f1;">${creatorName}</strong> has invited you to share live GPS coordinates on the ride <strong>"${tripName}"</strong>.
+            </p>
+            <div style="background: #1e1b4b; padding: 14px; border-radius: 8px; border-left: 4px solid #6366f1; margin-bottom: 20px;">
+                <div style="font-size: 12px; color: #a5b4fc; font-weight: 600;">DESTINATION:</div>
+                <div style="font-size: 14px; color: #ffffff; margin-top: 2px;">📍 ${destinationAddress || "Selected Group Destination"}</div>
+                <div style="font-size: 12px; color: #a5b4fc; font-weight: 600; margin-top: 8px;">TRIP ID CODE:</div>
+                <div style="font-size: 16px; color: #6366f1; font-weight: 700; font-family: monospace;">${tripId}</div>
+            </div>
+            <div style="text-align: center; margin: 28px 0 16px 0;">
+                <a href="${joinLink}" target="_blank" style="background: linear-gradient(135deg, #6366f1, #4f46e5); color: #ffffff; text-decoration: none; padding: 14px 32px; border-radius: 8px; font-weight: 700; font-size: 16px; display: inline-block; box-shadow: 0 10px 20px rgba(99, 102, 241, 0.35);">
+                    👉 Click Here to Join Trip Live Map
+                </a>
+            </div>
+            <p style="text-align: center; color: #94a3b8; font-size: 12px;">Or open RiderSync and enter Trip ID: <strong>${tripId}</strong></p>
+        </div>
+        <div style="text-align: center; margin-top: 20px; font-size: 11px; color: #64748b;">
+            &copy; RiderSync Real-Time Geolocation Tracking. Safe Riding!
+        </div>
+    </div>
+    `;
 
-        const fromAddress = process.env.EMAIL_USER ? `"RiderSync Trips" <${process.env.EMAIL_USER}>` : '"RiderSync Invites" <no-reply@ridersync.com>';
-
-        const info = await transporter.sendMail({
-            from: fromAddress,
-            to: toEmail,
-            subject: `You're invited to join trip "${tripName}" on RiderSync! 🏍️`,
-            html: htmlContent
-        });
-
-        const testPreviewUrl = nodemailer.getTestMessageUrl(info);
-        if (testPreviewUrl) {
-            console.log(`[TRIP INVITE ETHEREAL LINK] Sent to ${toEmail}: ${testPreviewUrl}`);
-        } else {
-            console.log(`[REAL TRIP INVITE SENT] Invitation email delivered to: ${toEmail}`);
-        }
-
-        return { success: true, previewUrl: testPreviewUrl || null };
-    } catch (error) {
-        console.error("[NODEMAILER TRIP INVITE ERROR]", error);
-        return { success: false, error: error.message };
-    }
+    return await sendEmailMessage({
+        toEmail,
+        subject: `You're invited to join trip "${tripName}" on RiderSync! 🏍️`,
+        htmlContent
+    });
 }
 
 // Helper function to generate a random 6-digit numeric OTP
