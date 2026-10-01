@@ -260,7 +260,7 @@ async function getEmailTransporter() {
     return cachedTransporter;
 }
 
-// Universal Email Dispatcher supporting Resend/Brevo HTTPS APIs & Nodemailer SMTP
+// Universal Email Dispatcher supporting Resend/Brevo/SendGrid HTTPS APIs & Nodemailer SMTP
 async function sendEmailMessage({ toEmail, subject, htmlContent }) {
     // 1. Try Resend HTTPS API (Recommended for Render/Cloud platforms)
     if (process.env.RESEND_API_KEY) {
@@ -316,6 +316,35 @@ async function sendEmailMessage({ toEmail, subject, htmlContent }) {
             }
         } catch (err) {
             console.error("[BREVO FETCH ERROR]", err);
+        }
+    }
+
+    // 3. Try SendGrid HTTPS API
+    if (process.env.SENDGRID_API_KEY) {
+        try {
+            const senderEmail = process.env.EMAIL_USER ? process.env.EMAIL_USER.trim() : "bhargavreddyy23@gmail.com";
+            const res = await fetch("https://api.sendgrid.com/v3/mail/send", {
+                method: "POST",
+                headers: {
+                    "Authorization": `Bearer ${process.env.SENDGRID_API_KEY.trim()}`,
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    personalizations: [{ to: [{ email: toEmail }] }],
+                    from: { email: senderEmail, name: "RiderSync Security" },
+                    subject: subject,
+                    content: [{ type: "text/html", value: htmlContent }]
+                })
+            });
+            if (res.ok || res.status === 202) {
+                console.log(`[SENDGRID HTTPS EMAIL DISPATCHED] Status: ${res.status}`);
+                return { success: true, messageId: "sendgrid-ok" };
+            } else {
+                const data = await res.json();
+                console.error("[SENDGRID API ERROR]", data);
+            }
+        } catch (err) {
+            console.error("[SENDGRID FETCH ERROR]", err);
         }
     }
 
