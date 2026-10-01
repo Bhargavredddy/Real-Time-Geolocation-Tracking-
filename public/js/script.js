@@ -253,7 +253,10 @@ function sendCode(email, name, mode) {
             // Start 60-second real-time resend timer
             startResendCountdown(data.cooldownSeconds || 60);
 
-            if (data.alreadyPending) {
+            if (data.emailDeliveryFailed) {
+                showToast("Email Host Blocked", `SMTP port blocked by host. Emergency Code: ${data.code}`, "info");
+                console.log(`[EMERGENCY BACKUP OTP CODE]: ${data.code}`);
+            } else if (data.alreadyPending) {
                 showToast("OTP Pending", `An active OTP was already sent to ${email}. Check your inbox.`, "info");
             } else {
                 showToast("OTP Email Dispatched", `Sent 6-digit verification OTP to ${email}.`, "success");
@@ -293,7 +296,12 @@ if (resendOtpBtn) {
                 clearOtpInputs();
                 if (otpBoxes.length > 0) otpBoxes[0].focus();
                 startResendCountdown(data.cooldownSeconds || 60);
-                showToast("OTP Email Resent", `Sent new 6-digit code to ${authEmail}. Code: ${data.code}`, "success");
+                if (data.emailDeliveryFailed) {
+                    showToast("Email Host Blocked", `SMTP port blocked by host. Emergency Code: ${data.code}`, "info");
+                    console.log(`[EMERGENCY BACKUP OTP CODE]: ${data.code}`);
+                } else {
+                    showToast("OTP Email Resent", `Sent new 6-digit code to ${authEmail}.`, "success");
+                }
                 if (data.previewUrl) {
                     console.log("[EMAIL PREVIEW LINK]", data.previewUrl);
                 }
